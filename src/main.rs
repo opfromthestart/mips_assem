@@ -31,13 +31,6 @@ impl Display for Args {
     }
 }
 
-pub enum Encoding {
-    // o, s, t, d, a, f
-    Register(i8, i8, i8, i8, i8, i8),
-    Immediate(i8, i8, i8, i16),
-    Jump(i8, i32),
-}
-
 enum Line<'a> {
     Instr(&'a InstrCode<'a>, Args),
     Label(String),
@@ -154,18 +147,21 @@ fn pass1(assem : &String) -> Vec<(Line,u32, Section)>
                         };
                         let end_opt = dir_data[begin as usize + 1 as usize..].find("\"");
                         let end: isize = match end_opt {
-                            Some(n) => n as isize,
+                            Some(n) => (n as isize) + begin + (1 as isize),
                             None => -1
                         };
                         if begin == -1 || end == -1 {
                             println!("Directive .ascii(z) is missing beginning or ending parentheses\nLine {0}: {1}", curline, line);
                             continue;
                         }
-                        let ascii = dir_data[begin as usize+(1 as usize)..end as usize-(1 as usize)].as_bytes();
+                        //TODO: get this to output bytes in the right order
+                        let ascii = dir_data[begin as usize+(1 as usize)..end as usize].as_bytes();
                         let mut byte_vec : Vec<u8> = Vec::new();
                         for i in ascii {
+                            //print!("{},",i);
                             byte_vec.push(*i);
                         }
+                        //println!();
                         if directive.eq(".asciiz") {
                             byte_vec.push(0);
                         }
@@ -254,6 +250,13 @@ pub fn parse_num(arg : &String) -> Result<i32, String> {
             Ok(n) => (Ok(n)),
             Err(e) => (Err(e.to_string()))
         };
+}
+
+pub enum Encoding {
+    // o, s, t, d, a, f
+    Register(i8, i8, i8, i8, i8, i8),
+    Immediate(i8, i8, i8, i16),
+    Jump(i8, i32),
 }
 
 fn get_bin(enc : Encoding) -> Vec<u8> {
