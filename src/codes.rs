@@ -304,7 +304,7 @@ pub fn get_enc(instr : &InstrCode, args: Args, lbl_adr : &HashMap<String, u32>, 
                             match t {
                                 Ok(tr) => {
                                     let i_m : i16 = (((*ir as i32 - adr as i32) >> 2) - 1) as i16;
-                                    println!("{}", i_m);
+                                    //println!("{}", i_m);
                                     return Encoding::Immediate(instr.code, sr, tr, i_m);
                                 }
                                 Err(_) => {println!("Register \"{0}\" not found in {1} on line {2}.", a2, instr.name, line)}
@@ -331,7 +331,7 @@ pub fn get_enc(instr : &InstrCode, args: Args, lbl_adr : &HashMap<String, u32>, 
                     match s {
                         Ok(sr) => {
                             let i_m: i16 = (((*ir as i32 - adr as i32) >> 2) - 1) as i16;
-                                    println!("{}", i_m);
+                                    //println!("{}", i_m);
                             return Encoding::Immediate(instr.code, sr, 0, i_m);
                         }
                         Err(_) => { println!("Register \"{0}\" not found in {1} on line {2}.", a1, instr.name, line) }

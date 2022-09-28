@@ -158,7 +158,7 @@ fn pass1(assem : &String) -> Vec<(Line,u32, Section)>
                             None => -1
                         };
                         if begin == -1 || end == -1 {
-                            println!("Directive .asciiz is missing beginning or ending parentheses\nLine {0}: {1}", curline, line);
+                            println!("Directive .ascii(z) is missing beginning or ending parentheses\nLine {0}: {1}", curline, line);
                             continue;
                         }
                         let ascii = dir_data[begin as usize+(1 as usize)..end as usize-(1 as usize)].as_bytes();
@@ -353,9 +353,12 @@ fn pass2(lines : Vec<(Line, u32, Section)>, start_text_opt : Option<u32>) -> Vec
         lbl_adr.insert(lbl, text_counter + c);
     }
 
+    /*
     for (lbl, c) in &lbl_adr {
         println!("{}:{}", lbl, c);
     }
+
+     */
 
     let mut data_code = Vec::new();
 
@@ -370,7 +373,7 @@ fn pass2(lines : Vec<(Line, u32, Section)>, start_text_opt : Option<u32>) -> Vec
         };
         match i {
             Line::Instr(instr, args) => {
-                println!("{}:{}", counter, instr.name);
+                //println!("{}:{}", counter, instr.name);
                 let enc = get_enc(instr, args.clone(), &lbl_adr, *ln, counter);
                 /*
                 match enc {
@@ -450,38 +453,56 @@ fn main() {
              */
 
             let bin_res = BinaryString::from_hex(&hex);
-            /*
+
             match bin_res {
-                Ok(bin) => {println!("{}", bin);}
-                Err(_) => {println!("Invalid hex???");}
-            }
-             */
-
-            let out = {
-                if args.len() == 4 && args[2].eq("-o") {
-                    &args[3]
-                }
-                else {
-                    let dot_find : Option<u8> = args[1].bytes().rev().find(".");
-                    let slash_find : Option<u8> = args[1].bytes().rev().find("/");
-                    let ln = args[1].len();
-                    match dot_find {
-                        None => {&args[1]}
-                        Some(n) => {
-                            match slash_find {
-                                None => {&(String::from(&args[..ln-dot_find]))}
-                                Some(n2) => {
-                                    if n > n2 {
-
+                Ok(bin) => {
+                    let out = String::from({
+                        if args.len() == 4 && args[2].eq("-o") {
+                            &args[3]
+                        } else {
+                            let dot_find: Option<usize> = args[1].rfind(".");
+                            let slash_find: Option<usize> = args[1].rfind("/");
+                            let ln = args[1].len();
+                            match dot_find {
+                                None => { &args[1] }
+                                Some(n) => {
+                                    match slash_find {
+                                        None => {
+                                            &args[1][..ln - n]
+                                        }
+                                        Some(n2) => {
+                                            if n > n2 {
+                                                &args[1]
+                                            } else {
+                                                &args[1][..ln - n]
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
+                    });
+
+                    let mut hex_lined = "".to_string();
+                    let mut i = 0;
+                    while i < hex.len() - 8 {
+                        hex_lined = hex_lined + &hex[i..i+8] + "\n";
+                        i += 8;
+                    }
+                    hex_lined = hex_lined + &hex[i..];
+
+                    match std::fs::write(format!("{}{}",out, ".ho".to_string()), hex_lined) {
+                        Ok(_) => {
+                            match std::fs::write(format!("{}{}", out, ".bo".to_string()), bin.to_string()) {
+                                Ok(_) => {println!("Results written to {0}.bo and {0}.ho", out);}
+                                Err(e) => {println!("Could not write binary to file, {}",e)}
+                            }
+                        }
+                        Err(e) => {println!("Could not write hex to file, {}", e)}
                     }
                 }
-            };
-            std::fs::write(out + ".ho", hex);
-            std::fs::write(out + ".bo", bin);
+                Err(_) => { println!("Invalid hex???"); }
+            }
         }
         Err(_) => {println!("File \"{0}\" not found.", &args[1])}
     }
