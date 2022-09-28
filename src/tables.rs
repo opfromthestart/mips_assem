@@ -1,4 +1,4 @@
-use crate::{InstrCode, Syntax};
+use crate::{Syntax};
 
 static REGS: [&str; 32] = [
     "zero",
@@ -35,7 +35,13 @@ static REGS: [&str; 32] = [
     "ra",
 ];
 
-static CODES: [InstrCode; 52] = [
+pub struct InstrCode<'a> {
+    pub(crate) name : &'a str,
+    pub(crate) syntax : Syntax,
+    pub(crate) code : i8,
+}
+
+static CODES: [InstrCode; 53] = [
     InstrCode{name: "null", syntax: Syntax::Syscall, code:-1},
 
     InstrCode{name : "add", syntax: Syntax::ArithLog, code: 32},
@@ -97,9 +103,11 @@ static CODES: [InstrCode; 52] = [
 
     InstrCode{name: "trap", syntax: Syntax::Trap, code: 26},
     InstrCode{name: "syscall", syntax: Syntax::Syscall, code: 12},
+
+    InstrCode{name: "mul", syntax: Syntax::S2ArithLog, code: 2},
 ];
 
-fn get_code(line : String) -> &'static InstrCode<'static> {
+pub fn get_code(line : String) -> &'static InstrCode<'static> {
     let parts : Vec<String> = line.split(" ").map(String::from).collect();
     for code in &CODES {
         if parts[0] == code.name {
@@ -109,7 +117,7 @@ fn get_code(line : String) -> &'static InstrCode<'static> {
     return &CODES[0];
 }
 
-fn as_register(arg : &String) -> Result<i8,()> {
+pub fn as_register(arg : &String) -> Result<i8,()> {
     let mut i : i8 = 0;
     let name = &arg[1..];
     while i < 32 {

@@ -1,38 +1,19 @@
 use std::collections::HashMap;
-use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::num::ParseIntError;
 
-use hex::FromHexError;
 use to_binary::BinaryString;
-use crate::codes::{get_arguments, get_enc};
+use crate::codes::{get_arguments, get_enc, Syntax};
+use crate::tables::{get_code, InstrCode};
 
 mod tables;
 mod codes;
 
 extern crate rev_slice;
 
-//use std::env;
+// I don't know much about licenses, feel free to use this but you probably shouldn't.
 
-enum Syntax {
-    ArithLog,
-    DivMult,
-    Shift,
-    ShiftV,
-    JumpR,
-    MoveFrom,
-    MoveTo,
-    ArithLogI,
-    LoadI,
-    Branch,
-    BranchZ,
-    LoadStore,
-    Jump,
-    Trap,
-    Syscall,
-}
-
-enum Args {
+#[derive(Clone)]
+pub enum Args {
     Three( String, String, String),
     Two( String, String),
     One( String),
@@ -50,9 +31,9 @@ impl Display for Args {
     }
 }
 
-enum Encoding {
-    // s, t, d, a, f
-    Register(i8, i8, i8, i8, i8),
+pub enum Encoding {
+    // o, s, t, d, a, f
+    Register(i8, i8, i8, i8, i8, i8),
     Immediate(i8, i8, i8, i16),
     Jump(i8, i32),
 }
@@ -63,7 +44,13 @@ enum Line<'a> {
     Data(Vec<u8>),
 }
 
-fn rem_spaces(inp : String) -> String {
+#[derive(Clone, Copy)]
+enum Section {
+    Text(),
+    Data(),
+}
+
+pub fn rem_spaces(inp : String) -> String {
     if inp.len() == 0 {
         return String::from("");
     }
@@ -80,11 +67,12 @@ fn rem_spaces(inp : String) -> String {
     return String::from(&inp[begin..end]);
 }
 
-fn pass1(assem : &String) -> Vec<(Line,u32)>
+fn pass1(assem : &String) -> Vec<(Line,u32, Section)>
 {
-    let mut lines : Vec<(Line, u32)> = vec!();
+    let mut lines : Vec<(Line, u32, Section)> = vec!();
     let mut labels : Vec<(String,u32)> = vec!();
     let mut cur_label : Option<String> = None;
+    let mut cur_section = Section::Text();
     let mut curline = 0;
     for line in assem.lines()
     {
@@ -138,7 +126,7 @@ fn pass1(assem : &String) -> Vec<(Line,u32)>
                         }
                         !fail
                     } {
-                        lines.push((Line::Label(lname), curline));
+                        lines.push((Line::Label(lname), curline, cur_section));
                         labels.push((String::from(&line_nc[0.. pos]), curline));
                         cur_label = Some(String::from(&line_nc[0.. pos]));
                     }
@@ -158,7 +146,7 @@ fn pass1(assem : &String) -> Vec<(Line,u32)>
                 Some(n) => {
                     let directive = String::from(&line_nl[0..n]);
                     let dir_data = String::from(&line_nl[n..]);
-                    if directive.eq(".asciiz") {
+                    if directive.eq(".asciiz") || directive.eq(".ascii") {
                         let begin_opt = dir_data.find("\"");
                         let begin = match begin_opt {
                             Some(n) => n as isize,
@@ -178,8 +166,16 @@ fn pass1(assem : &String) -> Vec<(Line,u32)>
                         for i in ascii {
                             byte_vec.push(*i);
                         }
-                        byte_vec.push(0);
-                        lines.push((Line::Data(byte_vec), curline));
+                        if directive.eq(".asciiz") {
+                            byte_vec.push(0);
+                        }
+                        lines.push((Line::Data(byte_vec), curline, cur_section));
+                    }
+                    else if directive.eq(".data") {
+                        cur_section = Section::Data();
+                    }
+                    else if directive.eq(".data") {
+                        cur_section = Section::Text();
                     }
                 }
                 None => {}
@@ -191,9 +187,9 @@ fn pass1(assem : &String) -> Vec<(Line,u32)>
 
         let line_nl2 = line_nl.clone();
         let code : &InstrCode = get_code(line_nl2);
-        if code.name == ""
+        if code.code == -1
         {
-            println!("Invalid instruction code {0} found.\nLine {1}: {2}", code.name, curline, line);
+            println!("Invalid instruction code found.\nLine {0}: {1}", curline, line);
         }
 
         let line_args : String = {
@@ -215,13 +211,13 @@ fn pass1(assem : &String) -> Vec<(Line,u32)>
 
         let adata : Args = get_arguments(line_args, code);
 
-        lines.push((Line::Instr(code, adata), curline));
+        lines.push((Line::Instr(code, adata), curline, cur_section));
     }
 
     return lines;
 }
 
-fn parse_num(arg : &String) -> Result<i32, String> {
+pub fn parse_num(arg : &String) -> Result<i32, String> {
     if arg.len() < 2 {
         return match arg.parse() {
             Ok(n) => (Ok(n)),
@@ -262,25 +258,27 @@ fn parse_num(arg : &String) -> Result<i32, String> {
 
 fn get_bin(enc : Encoding) -> Vec<u8> {
     match enc {
-        Encoding::Register(s, t, d, a, f) => {
+        Encoding::Register(o, s, t, d, a, f) => {
             let mut b: Vec<u8> = Vec::new();
-            b.push((s >> 3) as u8);
-            b.push((((s as i16) << 5)%256 + t as i16) as u8);
-            b.push((((d as i16) << 3)%256 + (a >> 2) as i16) as u8);
-            b.push((((a as i16) << 6)%256 + f as i16) as u8);
+            b.push(((o << 2) + (s >> 3)) as u8);
+            b.push(((s << 5) + t) as u8);
+            b.push(((d << 3)+ (a >> 2)) as u8);
+            b.push(((a << 6) + f) as u8);
             b
         }
         Encoding::Immediate(o, s, t, i) => {
+            //println!("{}", o);
+            //println!("{}", o<<2);
             let mut b: Vec<u8> = Vec::new();
-            b.push((o << 2 + s >> 3) as u8);
-            b.push((((s as i16) << 5)%256 + t as i16) as u8);
+            b.push(((o<<2) + (s >> 3)) as u8);
+            b.push(((s << 5) + t) as u8);
             b.push((i >> 8) as u8);
             b.push((i) as u8);
             b
         }
         Encoding::Jump(o, i) => {
             let mut b: Vec<u8> = Vec::new();
-            b.push((o << 2 + i / (2 << 24)) as u8);
+            b.push(((o<<2) + ((i >> 24) as i8)) as u8);
             b.push((i >> 16) as u8);
             b.push((i >> 8) as u8);
             b.push((i) as u8);
@@ -289,57 +287,129 @@ fn get_bin(enc : Encoding) -> Vec<u8> {
     }
 }
 
-fn pass2(lines : Vec<(Line, u32)>) -> Vec<u8> {
-    let mut machine_code = Vec::new();
+fn pass2(lines : Vec<(Line, u32, Section)>, start_text_opt : Option<u32>) -> Vec<u8> {
     let mut lbl_adr : HashMap<String, u32> = HashMap::new();
-    let mut counter : u32 = 0x1000;
+    let mut data_lbl_adr : HashMap<String, u32> = HashMap::new();
 
-    //TODO i did a goof, this needs to be 2 parts
-    for (i, ln) in lines {
+    let start_text = match start_text_opt {
+        None => {0x1000}
+        Some(n) => {n}
+    };
+    let mut text_counter : u32 = start_text;
+    let mut data_counter : u32 = start_text;
+
+    let mut text_code = Vec::new();
+
+    for (i, _, sect) in &lines {
+
         match i {
             Line::Label(name) => {
                 if name.eq("START") {
-                    let mut upd_lbl_adr = HashMap::new();
-                    for (lbl, c) in &lbl_adr {
-                        upd_lbl_adr.insert(String::from(lbl), c+4);
+                    let (counter, adrs) : (&mut u32, _)  = match sect {
+                        Section::Text() => { (&mut text_counter, &mut lbl_adr) }
+                        Section::Data() => { (&mut data_counter, &mut data_lbl_adr) }
+                    };
+
+                    let mut upd_adr : HashMap<String, u32> = HashMap::new();
+                    {
+                        for (lbl, c) in &mut *adrs {
+                            upd_adr.insert(String::from(lbl), *c + 4);
+                        }
                     }
-                    for (lbl, c) in upd_lbl_adr {
-                        lbl_adr.insert(lbl, c);
+                    //for (lbl, c) in upd_adr {
+                    //    adrs.insert(lbl, c);
+                    //}
+                    *adrs = upd_adr;
+                    for b in get_bin(Encoding::Jump(2, (*counter as i32) >> 2 + 1)) {
+                        text_code.push(b);
                     }
-                    let mut i = 0;
-                    for b in get_bin(Encoding::Jump(2, (counter as i32 - 0x1000) >> 2 + 1)) {
-                        machine_code.insert(i, b);
-                        i+=1;
-                    }
-                    counter += 4;
+                    *counter += 4;
                 }
-                lbl_adr.insert(name, counter);
+                let (counter, adrs) : (&mut u32, _)  = match sect {
+                    Section::Text() => { (&mut text_counter, &mut lbl_adr) }
+                    Section::Data() => { (&mut data_counter, &mut data_lbl_adr) }
+                };
+                (*adrs).insert(String::from(name), *counter);
             }
-            //n => {counter += get_line_length(n);}
+            Line::Data(v) => {
+                let counter  = match sect {
+                    Section::Text() => { &mut text_counter }
+                    Section::Data() => { &mut data_counter }
+                };
+                *counter += v.len() as u32;
+            }
+            Line::Instr(_, _) => {
+                let counter  = match sect {
+                    Section::Text() => { &mut text_counter }
+                    Section::Data() => { &mut data_counter }
+                };
+
+                //println!("{1}:{0}", inst.name, counter);
+                *counter += 4;
+            }
+        }
+    }
+    for (lbl, c) in data_lbl_adr {
+        lbl_adr.insert(lbl, text_counter + c);
+    }
+
+    for (lbl, c) in &lbl_adr {
+        println!("{}:{}", lbl, c);
+    }
+
+    let mut data_code = Vec::new();
+
+    for (i, ln, sect) in &lines {
+        let (machine_code , counter) : (&mut Vec<u8>, _) = match sect {
+            Section::Text() => {
+                let t : u32 = text_code.len() as u32+start_text;
+                (&mut text_code, t)}
+            Section::Data() => {
+                let t : u32 = data_code.len() as u32+text_counter;
+                (&mut data_code, t)}
+        };
+        match i {
             Line::Instr(instr, args) => {
-                let enc = get_enc(instr, args, &lbl_adr, ln, counter);
+                println!("{}:{}", counter, instr.name);
+                let enc = get_enc(instr, args.clone(), &lbl_adr, *ln, counter);
+                /*
+                match enc {
+                    Encoding::Register(o, s, t, d, a, f) => {println!("{},{},{},{},{},{}", o,s,t,d,a,f);}
+                    Encoding::Immediate(o, s, t, i) => {println!("{},{},{},{}",o, s,t,i);}
+                    Encoding::Jump(o, i) => {println!("{},{}", o, i);}
+                }
+                 */
                 let data = get_bin(enc);
                 for i in data {
                     machine_code.push(i)
                 }
-                counter += 4;
             }
             Line::Data(data) => {
-                for i in &data {
+                for i in data {
                     machine_code.push(*i);
                 }
-                counter += data.len() as u32;
             }
+            _ => {}
         }
     }
 
+    /*
     for (i, l) in lbl_adr {
         println!("{} {}", i, l);
     }
+     */
 
-    machine_code
+    for i in data_code {
+        text_code.push(i);
+    }
+    text_code
 }
 
+// Tested on own code as well as samples from:
+// https://ecs-network.serv.pacific.edu/ecpe-170/tutorials/mips-example-programs
+// https://github.com/ffcabbar/MIPS-Assembly-Language-Examples
+
+// Errors:
 fn main() {
     std::env::set_var("RUST_BACKTRACE","1");
 
@@ -349,7 +419,8 @@ fn main() {
         Ok(data) => {
             let lines = pass1(&data);
 
-            for (line, ln) in &lines {
+            /*
+            for (line, ln, sect) in &lines {
                 match line {
                     Line::Instr(code, args) => {println!("Instruction {0} with {1}", code.name, args)}
                     Line::Label(name) => {println!("Label `{0}`", name)}
@@ -362,17 +433,55 @@ fn main() {
                     }
                 }
             }
+             */
 
 
-            let data = pass2(lines);
+            let data = pass2(lines, Some(0x400000));
+
             let hex = hex::encode(data);
-            println!("{}", hex);
 
-            let bin_res = BinaryString::from_hex(hex);
+            /*
+            let mut i = 0;
+            while i < hex.len() - 8 {
+                println!("{}", &hex[i..i+8]);
+                i += 8;
+            }
+            println!("{}", &hex[i..]);
+             */
+
+            let bin_res = BinaryString::from_hex(&hex);
+            /*
             match bin_res {
                 Ok(bin) => {println!("{}", bin);}
                 Err(_) => {println!("Invalid hex???");}
             }
+             */
+
+            let out = {
+                if args.len() == 4 && args[2].eq("-o") {
+                    &args[3]
+                }
+                else {
+                    let dot_find : Option<u8> = args[1].bytes().rev().find(".");
+                    let slash_find : Option<u8> = args[1].bytes().rev().find("/");
+                    let ln = args[1].len();
+                    match dot_find {
+                        None => {&args[1]}
+                        Some(n) => {
+                            match slash_find {
+                                None => {&(String::from(&args[..ln-dot_find]))}
+                                Some(n2) => {
+                                    if n > n2 {
+
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            std::fs::write(out + ".ho", hex);
+            std::fs::write(out + ".bo", bin);
         }
         Err(_) => {println!("File \"{0}\" not found.", &args[1])}
     }
