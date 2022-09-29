@@ -1,4 +1,5 @@
-use crate::{Syntax};
+use std::collections::HashMap;
+use crate::{Args, rem_spaces, Syntax};
 
 static REGS: [&str; 32] = [
     "zero",
@@ -127,4 +128,37 @@ pub fn as_register(arg : &String) -> Result<i8,()> {
         i+=1;
     }
     Err(())
+}
+
+pub fn get_ops(opfile : Option<&str>) -> HashMap<String, fn (Args) -> Vec<&'static InstrCode<'static>>> {
+    let fname = match opfile {
+        None => "res/PseudoOps.txt",
+        Some(s) => s
+    };
+
+    let instr_table = HashMap::new();
+
+    let total = std::fs::read_to_string(fname);
+
+    match total {
+        Ok(tot) =>
+        for line in tot.lines() {
+            let line_nc_dirty = { // Removes comments, which start with #
+                let pos_opt: Option<usize> = line.find('#');
+                match pos_opt
+                {
+                    Some(n) => String::from(&line[0..n]),
+                    None => line.to_string()
+                }
+            };
+            let line_nc = rem_spaces(line_nc_dirty);
+
+            if line_nc.len() == 0 {
+                continue;
+            }
+        },
+        _ => {println!("PseudoOps.txt not found.");}
+    };
+
+    instr_table
 }

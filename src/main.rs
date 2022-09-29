@@ -49,10 +49,13 @@ pub fn rem_spaces(inp : String) -> String {
     }
     let mut begin : usize = 0;
     let mut end : usize = inp.len();
-    while inp[begin..begin+(1 as usize)].eq(" ") {
+    while inp[begin..begin+(1 as usize)].eq(" ") || inp[begin..begin+(1 as usize)].eq("\t") {
         begin+=1;
+        if begin == end {
+            return String::from("");
+        }
     }
-    while inp[end-1..end].eq(" ") && end>begin {
+    while inp[end-1..end].eq(" ") || inp[end-1..end].eq("\t") {
         end-=1;
     }
     //let sub : &'a str = &inp[begin..end];
@@ -303,6 +306,7 @@ fn pass2(lines : Vec<(Line, u32, Section)>, start_text_opt : Option<u32>) -> Vec
 
     let mut text_code = Vec::new();
 
+    //TODO: move this to first pass I think
     for (i, _, sect) in &lines {
 
         match i {
@@ -421,6 +425,7 @@ fn main() {
 
     let args : Vec<String> = std::env::args().collect();
     let fdata = std::fs::read_to_string(&args[1]);
+
     match fdata {
         Ok(data) => {
             let lines = pass1(&data);
