@@ -63,16 +63,33 @@ pub fn rem_spaces(inp : String) -> String {
     return String::from(&inp[begin..end]);
 }
 
-fn pass1(assem : &String) -> Vec<(Line,u32, Section)>
+fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Section)>, HashMap<String, u32>, u32, u32)
 {
     let mut lines : Vec<(Line, u32, Section)> = vec!();
-    let mut labels : Vec<(String,u32)> = vec!();
+    let mut labels : Vec<(String, u32)> = vec!();
+
+    let mut lbl_adr : HashMap<String, u32> = HashMap::new();
+    let mut data_lbl_adr : HashMap<String, u32> = HashMap::new();
+
     let mut cur_label : Option<String> = None;
     let mut cur_section = Section::Text();
+
+    let start_text = match start_text_opt {
+        None => {0x1000}
+        Some(n) => {n}
+    };
+    let mut text_counter : u32 = start_text;
+    let mut data_counter : u32 = start_text;
+
     let mut curline = 0;
     for line in assem.lines()
     {
         curline += 1;
+
+        let (counter, adrs) : (&mut u32, _)  = match cur_section {
+            Section::Text() => { (&mut text_counter, &mut lbl_adr) }
+            Section::Data() => { (&mut data_counter, &mut data_lbl_adr) }
+        };
 
         //println!("{}",curline);
 
@@ -105,7 +122,7 @@ fn pass1(assem : &String) -> Vec<(Line,u32, Section)>
             match pos_opt {
                 None => line_nc,
                 Some(pos) => {
-                    let lname = String::from(&line_nc[0.. pos]);
+                    let lname = String::from(&line_nc[0..pos]);
 
                     if let Some(_) = lname.find(" ") {
                         println!("Invalid label name \"{0}\" found.\nLine {1}: {2}", lname, curline, line);
@@ -114,7 +131,7 @@ fn pass1(assem : &String) -> Vec<(Line,u32, Section)>
                     if {
                         let mut fail = false;
                         for (label, lline) in &labels {
-                            if label.eq(&lname) {
+                            if (*label).eq(&lname) {
                                 println!("Duplicate label {0} found.\nFirst was found at {1} and second was found at {2}.", lname, lline, curline);
                                 fail = true;
                                 break;
@@ -122,11 +139,24 @@ fn pass1(assem : &String) -> Vec<(Line,u32, Section)>
                         }
                         !fail
                     } {
-                        lines.push((Line::Label(lname), curline, cur_section));
-                        labels.push((String::from(&line_nc[0.. pos]), curline));
-                        cur_label = Some(String::from(&line_nc[0.. pos]));
+                        if lname.eq("START") {
+                            let mut upd_adr: HashMap<String, u32> = HashMap::new();
+                            {
+                                for (lbl, c) in &mut *adrs {
+                                    upd_adr.insert(String::from(lbl), *c + 4);
+                                }
+                            }
+                            //for (lbl, c) in upd_adr {
+                            //    adrs.insert(lbl, c);
+                            //}
+                            *adrs = upd_adr;
+                        }
+                        lines.push((Line::Label(String::from(&lname)), curline, cur_section));
+                        labels.push((String::from(lname), curline));
+                        adrs.insert(String::from(&line_nc[0..pos]), *counter);
+                        cur_label = Some(String::from(&line_nc[0..pos]));
                     }
-                    rem_spaces(String::from(&line_nc[pos+ (1 as usize)..]))
+                    rem_spaces(String::from(&line_nc[pos + (1 as usize)..]))
                 }
             }
         };
@@ -168,6 +198,7 @@ fn pass1(assem : &String) -> Vec<(Line,u32, Section)>
                         if directive.eq(".asciiz") {
                             byte_vec.push(0);
                         }
+                        *counter += byte_vec.len() as u32;
                         lines.push((Line::Data(byte_vec), curline, cur_section));
                     }
                     else if directive.eq(".data") {
@@ -211,9 +242,15 @@ fn pass1(assem : &String) -> Vec<(Line,u32, Section)>
         let adata : Args = get_arguments(line_args, code);
 
         lines.push((Line::Instr(code, adata), curline, cur_section));
+
+        *counter += 4;
     }
 
-    return lines;
+    for (lbl, c) in data_lbl_adr {
+        lbl_adr.insert(lbl, text_counter + c);
+    }
+
+    return (lines, lbl_adr, start_text, text_counter);
 }
 
 pub fn parse_num(arg : &String) -> Result<i32, String> {
@@ -293,80 +330,9 @@ fn get_bin(enc : Encoding) -> Vec<u8> {
     }
 }
 
-fn pass2(lines : Vec<(Line, u32, Section)>, start_text_opt : Option<u32>) -> Vec<u8> {
-    let mut lbl_adr : HashMap<String, u32> = HashMap::new();
-    let mut data_lbl_adr : HashMap<String, u32> = HashMap::new();
-
-    let start_text = match start_text_opt {
-        None => {0x1000}
-        Some(n) => {n}
-    };
-    let mut text_counter : u32 = start_text;
-    let mut data_counter : u32 = start_text;
+fn pass2(lines : Vec<(Line, u32, Section)>, lbl_adr : &HashMap<String, u32>, start_text : u32, text_counter : u32) -> Vec<u8> {
 
     let mut text_code = Vec::new();
-
-    //TODO: move this to first pass I think
-    for (i, _, sect) in &lines {
-
-        match i {
-            Line::Label(name) => {
-                if name.eq("START") {
-                    let (counter, adrs) : (&mut u32, _)  = match sect {
-                        Section::Text() => { (&mut text_counter, &mut lbl_adr) }
-                        Section::Data() => { (&mut data_counter, &mut data_lbl_adr) }
-                    };
-
-                    let mut upd_adr : HashMap<String, u32> = HashMap::new();
-                    {
-                        for (lbl, c) in &mut *adrs {
-                            upd_adr.insert(String::from(lbl), *c + 4);
-                        }
-                    }
-                    //for (lbl, c) in upd_adr {
-                    //    adrs.insert(lbl, c);
-                    //}
-                    *adrs = upd_adr;
-                    for b in get_bin(Encoding::Jump(2, (*counter as i32) >> 2 + 1)) {
-                        text_code.push(b);
-                    }
-                    *counter += 4;
-                }
-                let (counter, adrs) : (&mut u32, _)  = match sect {
-                    Section::Text() => { (&mut text_counter, &mut lbl_adr) }
-                    Section::Data() => { (&mut data_counter, &mut data_lbl_adr) }
-                };
-                (*adrs).insert(String::from(name), *counter);
-            }
-            Line::Data(v) => {
-                let counter  = match sect {
-                    Section::Text() => { &mut text_counter }
-                    Section::Data() => { &mut data_counter }
-                };
-                *counter += v.len() as u32;
-            }
-            Line::Instr(_, _) => {
-                let counter  = match sect {
-                    Section::Text() => { &mut text_counter }
-                    Section::Data() => { &mut data_counter }
-                };
-
-                //println!("{1}:{0}", inst.name, counter);
-                *counter += 4;
-            }
-        }
-    }
-    for (lbl, c) in data_lbl_adr {
-        lbl_adr.insert(lbl, text_counter + c);
-    }
-
-    /*
-    for (lbl, c) in &lbl_adr {
-        println!("{}:{}", lbl, c);
-    }
-
-     */
-
     let mut data_code = Vec::new();
 
     for (i, ln, sect) in &lines {
@@ -428,7 +394,7 @@ fn main() {
 
     match fdata {
         Ok(data) => {
-            let lines = pass1(&data);
+            let (lines, lbls, start, text) = pass1(&data, Some(0x400000));
 
             /*
             for (line, ln, sect) in &lines {
@@ -447,7 +413,7 @@ fn main() {
              */
 
 
-            let data = pass2(lines, Some(0x400000));
+            let data = pass2(lines, &lbls, start, text);
 
             let hex = hex::encode(data);
 
