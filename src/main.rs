@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
 
 use to_binary::BinaryString;
-use crate::codes::{get_arguments, get_enc, Syntax};
+use crate::codes::{Args, get_arguments, get_enc, Syntax};
 use crate::tables::{get_code, InstrCode};
 
 mod tables;
@@ -12,27 +11,8 @@ extern crate rev_slice;
 
 // I don't know much about licenses, feel free to use this but you probably shouldn't.
 
-#[derive(Clone)]
-pub enum Args {
-    Three( String, String, String),
-    Two( String, String),
-    One( String),
-    None,
-}
-
-impl Display for Args {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Args::Three(a, b, c) => {write!(f, "{0}, {1}, {2}", a, b, c)}
-            Args::Two(a, b) => {write!(f, "{0}, {1}", a, b)}
-            Args::One(a) => {write!(f, "{0}", a)}
-            Args::None => {Ok(())}
-        }
-    }
-}
-
 enum Line<'a> {
-    Instr(&'a InstrCode<'a>, Args),
+    Instr(&'a InstrCode<'a>, Args<String>),
     Label(String),
     Data(Vec<u8>),
 }
@@ -43,7 +23,9 @@ enum Section {
     Data(),
 }
 
-pub fn rem_spaces(inp : String) -> String {
+pub fn rem_spaces<S: Into<String>>(inp_s : S) -> String {
+    let inp = inp_s.into();
+
     if inp.len() == 0 {
         return String::from("");
     }
@@ -97,8 +79,8 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
             let pos_opt: Option<usize> = line.find('#');
             match pos_opt
             {
-                Some(n) => String::from(&line[0..n]),
-                None => line.to_string()
+                Some(n) => &line[0..n],
+                None => line
             }
         };
         let line_nc = rem_spaces(line_nc_dirty);
@@ -122,7 +104,7 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
             match pos_opt {
                 None => line_nc,
                 Some(pos) => {
-                    let lname = String::from(&line_nc[0..pos]);
+                    let lname = &line_nc[0..pos];
 
                     if let Some(_) = lname.find(" ") {
                         println!("Invalid label name \"{0}\" found.\nLine {1}: {2}", lname, curline, line);
@@ -143,7 +125,7 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
                             let mut upd_adr: HashMap<String, u32> = HashMap::new();
                             {
                                 for (lbl, c) in &mut *adrs {
-                                    upd_adr.insert(String::from(lbl), *c + 4);
+                                    upd_adr.insert(lbl.into(), *c + 4);
                                 }
                             }
                             //for (lbl, c) in upd_adr {
@@ -151,12 +133,12 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
                             //}
                             *adrs = upd_adr;
                         }
-                        lines.push((Line::Label(String::from(&lname)), curline, cur_section));
-                        labels.push((String::from(lname), curline));
-                        adrs.insert(String::from(&line_nc[0..pos]), *counter);
-                        cur_label = Some(String::from(&line_nc[0..pos]));
+                        lines.push((Line::Label(lname.into()), curline, cur_section));
+                        labels.push((lname.into(), curline));
+                        adrs.insert(line_nc[0..pos].into(), *counter);
+                        cur_label = Some(line_nc[0..pos].into());
                     }
-                    rem_spaces(String::from(&line_nc[pos + (1 as usize)..]))
+                    rem_spaces(&line_nc[pos + (1 as usize)..])
                 }
             }
         };
@@ -170,8 +152,8 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
             //todo!("Directinges");
             match pos_opt {
                 Some(n) => {
-                    let directive = String::from(&line_nl[0..n]);
-                    let dir_data = String::from(&line_nl[n..]);
+                    let directive = &line_nl[0..n];
+                    let dir_data = &line_nl[n..];
                     if directive.eq(".asciiz") || directive.eq(".ascii") {
                         let begin_opt = dir_data.find("\"");
                         let begin = match begin_opt {
@@ -215,8 +197,7 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
 
         //println!("{}",line_nl);
 
-        let line_nl2 = line_nl.clone();
-        let code : &InstrCode = get_code(line_nl2);
+        let code : &InstrCode = get_code(&line_nl);
         if code.code == -1
         {
             println!("Invalid instruction code found.\nLine {0}: {1}", curline, line);
@@ -239,7 +220,7 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
 
         //println!("{}",line_args);
 
-        let adata : Args = get_arguments(line_args, code);
+        let adata : Args<String> = get_arguments(line_args, code);
 
         lines.push((Line::Instr(code, adata), curline, cur_section));
 
@@ -253,7 +234,8 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
     return (lines, lbl_adr, start_text, text_counter);
 }
 
-pub fn parse_num(arg : &String) -> Result<i32, String> {
+pub fn parse_num<S : Into<String>>(arg_i : S) -> Result<i32, String> {
+    let arg = arg_i.into();
     if arg.len() < 2 {
         return match arg.parse() {
             Ok(n) => (Ok(n)),

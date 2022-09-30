@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use crate::{Args, rem_spaces, Syntax};
+use crate::codes::Arg;
 
 static REGS: [&str; 32] = [
     "zero",
@@ -108,8 +109,9 @@ static CODES: [InstrCode; 53] = [
     InstrCode{name: "mul", syntax: Syntax::S2ArithLog, code: 2},
 ];
 
-pub fn get_code(line : String) -> &'static InstrCode<'static> {
-    let parts : Vec<String> = line.split(" ").map(String::from).collect();
+pub fn get_code<S : Into<String>>(line : S) -> &'static InstrCode<'static> {
+    let line_str = line.into();
+    let parts : Vec<String> = line_str.split(" ").map(String::from).collect();
     for code in &CODES {
         if parts[0] == code.name {
             return code;
@@ -118,9 +120,10 @@ pub fn get_code(line : String) -> &'static InstrCode<'static> {
     return &CODES[0];
 }
 
-pub fn as_register(arg : &String) -> Result<i8,()> {
+pub fn as_register<S : Into<String>>(arg : S) -> Result<i8,()> {
     let mut i : i8 = 0;
-    let name = &arg[1..];
+
+    let name = &(arg.into())[1..];
     while i < 32 {
         if REGS[i as usize] == name {
             return Ok(i);
@@ -130,7 +133,7 @@ pub fn as_register(arg : &String) -> Result<i8,()> {
     Err(())
 }
 
-pub fn get_ops(opfile : Option<&str>) -> HashMap<String, fn (Args) -> Vec<&'static InstrCode<'static>>> {
+pub fn get_ops(opfile : Option<&str>) -> HashMap<String, fn (Args<Arg>) -> Vec<&'static InstrCode<'static>>> {
     let fname = match opfile {
         None => "res/PseudoOps.txt",
         Some(s) => s
@@ -143,12 +146,12 @@ pub fn get_ops(opfile : Option<&str>) -> HashMap<String, fn (Args) -> Vec<&'stat
     match total {
         Ok(tot) =>
         for line in tot.lines() {
-            let line_nc_dirty = { // Removes comments, which start with #
+            let line_nc_dirty : &str = { // Removes comments, which start with #
                 let pos_opt: Option<usize> = line.find('#');
                 match pos_opt
                 {
-                    Some(n) => String::from(&line[0..n]),
-                    None => line.to_string()
+                    Some(n) => &line[0..n],
+                    None => line
                 }
             };
             let line_nc = rem_spaces(line_nc_dirty);

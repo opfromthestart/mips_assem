@@ -2,7 +2,8 @@ use core::option::Option;
 use core::option::Option::{None, Some};
 use core::result::Result::{Err, Ok};
 use std::collections::HashMap;
-use crate::{Args, Encoding, parse_num, rem_spaces};
+use std::fmt::{Display, Formatter};
+use crate::{Encoding, parse_num, rem_spaces};
 use crate::tables::{as_register, InstrCode};
 
 pub enum Syntax {
@@ -24,36 +25,61 @@ pub enum Syntax {
     S2ArithLog,
 }
 
-pub fn get_argument(arg_line : String, sep : Option<String>) -> (String, String) {
+
+#[derive(Clone)]
+pub enum Args<T> {
+    Three( T, T, T),
+    Two( T, T),
+    One( T),
+    None,
+}
+
+#[derive(Clone)]
+pub enum Arg {
+    Reg(i8),
+    Imm(i32),
+    Label(String)
+}
+
+impl Display for Args<String> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Args::Three(a, b, c) => {write!(f, "{0}, {1}, {2}", a, b, c)}
+            Args::Two(a, b) => {write!(f, "{0}, {1}", a, b)}
+            Args::One(a) => {write!(f, "{0}", a)}
+            Args::None => {Ok(())}
+        }
+    }
+}
+
+pub fn get_argument<S : Into<String>>(arg_line : S, sep : Option<String>) -> (String, String) {
     let sep = match sep {
         Some(s) => s,
         None => ",".to_string()
     };
 
-    let mut pos_opt = arg_line.find(&sep);
-
-    if pos_opt == None
-    {
-        //std::cerr << "Expected " << num_args << " arguments and got " << argpos << std::endl;
-        pos_opt = arg_line.find(' ');
-        if pos_opt == None {
-            //let mt : &'a str = "";
-            //let mt2 : String = String::from(mt);
-            return (arg_line, String::from(""));
+    let arg_line_s = arg_line.into();
+    let pos = match arg_line_s.find(&sep) {
+        Some(n) => n,
+        None => {
+            match arg_line_s.find(' ') {
+                Some(n) => n,
+                None => return (arg_line_s, "".to_owned())
+            }
         }
-    }
+    };
 
     //let asub : &'a str = &arg_line[0..pos_opt.unwrap()];
     //let astr : String = String::from(asub);
-    let arg : String = rem_spaces(String::from(&arg_line[0..pos_opt.unwrap()]));
+    let arg : String = rem_spaces(&arg_line_s[0..pos]);
 
     //let rsub : &'a str = &arg_line[0..pos_opt.unwrap()+(1 as usize)];
     //let rstr : String = String::from(rsub);
-    let rest : String = rem_spaces(String::from(&arg_line[pos_opt.unwrap()+(1 as usize)..]));
+    let rest : String = rem_spaces(&arg_line_s[pos+(1 as usize)..]);
     return (arg, rest);
 }
 
-pub fn get_arguments(arg_line : String, instruction: &InstrCode) -> Args
+pub fn get_arguments<S : Into<String>>(arg_line : S, instruction: &InstrCode) -> Args<String>
 {
     match instruction.syntax
     {
@@ -98,7 +124,65 @@ pub fn get_arguments(arg_line : String, instruction: &InstrCode) -> Args
     }
 }
 
-pub fn get_enc(instr : &InstrCode, args: Args, lbl_adr : &HashMap<String, u32>, line: u32, adr: u32) -> Encoding {
+pub fn get_argument2<S : Into<String>>(arg_s : S) -> Arg {
+    let arg_str = rem_spaces(arg_s);
+
+    let reg_test = as_register(&arg_str);
+    match reg_test {
+        Ok(n) => Arg::Reg(n),
+        Err(_) => {
+            let num_test = parse_num(&arg_str);
+            match num_test {
+                Ok(n) => Arg::Imm(n),
+                Err(_) => Arg::Label(arg_str.into())
+            }
+        }
+    }
+}
+
+pub fn get_arguments2<S : Into<String>>(arg_line_s : S) -> Args<Arg> {
+    let arg_line = rem_spaces(arg_line_s);
+    if arg_line.len() == 0 {
+        return Args::None;
+    }
+    let is_store : Option<usize> = arg_line.find("(");
+
+    match is_store {
+        None => {
+            let (p1, arg1) = match arg_line.find(",") {
+                None => {
+                    return Args::One(get_argument2(arg_line));
+                }
+                Some(n) => (n, get_argument2(&arg_line[..n]))
+            };
+
+            let argl2 = &arg_line[p1+(1 as usize)..];
+            let p2 : Option<usize> = argl2.find(",");
+            return match p2 {
+                None => Args::Two(arg1, get_argument2(argl2)),
+                Some(n) => Args::Three(arg1, get_argument2(&arg_line[..n]),
+                                              get_argument2(&arg_line[n+(1 as usize)..]))
+            };
+        }
+        Some(p2) => {
+            let p3 = match arg_line.find(")") {
+                Some(n) => n,
+                None => {println!("Missing ending parenthesis in {}.", arg_line); arg_line.len()}
+            };
+
+            let p1 : Option<usize> = arg_line.find(",");
+            return match p1 {
+                None => Args::Two(get_argument2(&arg_line[..p2]),
+                                     get_argument2(&arg_line[p2+(1 as usize)..p3])),
+                Some(n) => Args::Three(get_argument2(&arg_line[..n]),
+                                            get_argument2(&arg_line[n+(1 as usize)..p2]),
+                                            get_argument2(&arg_line[p2+(1 as usize)..p3]))
+            };
+        }
+    };
+}
+
+pub fn get_enc(instr : &InstrCode, args: Args<String>, lbl_adr : &HashMap<String, u32>, line: u32, adr: u32) -> Encoding {
     match instr.syntax {
         Syntax::ArithLog => {
             let (a1, a2, a3) = match args {
