@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use to_binary::BinaryString;
-use crate::codes::{Args, get_arguments, get_enc, Syntax};
+
+use crate::codes::{Arg, Args, get_arguments2, get_enc2, Syntax};
 use crate::tables::{get_code, InstrCode};
 
 mod tables;
@@ -12,7 +13,7 @@ extern crate rev_slice;
 // I don't know much about licenses, feel free to use this but you probably shouldn't.
 
 enum Line<'a> {
-    Instr(&'a InstrCode<'a>, Args<String>),
+    Instr(&'a InstrCode<'a>, Args<Arg>),
     Label(String),
     Data(Vec<u8>),
 }
@@ -220,7 +221,7 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
 
         //println!("{}",line_args);
 
-        let adata : Args<String> = get_arguments(line_args, code);
+        let adata : Args<Arg> = get_arguments2(line_args);
 
         lines.push((Line::Instr(code, adata), curline, cur_section));
 
@@ -232,46 +233,6 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
     }
 
     return (lines, lbl_adr, start_text, text_counter);
-}
-
-pub fn parse_num<S : Into<String>>(arg_i : S) -> Result<i32, String> {
-    let arg = arg_i.into();
-    if arg.len() < 2 {
-        return match arg.parse() {
-            Ok(n) => (Ok(n)),
-            Err(e) => (Err(e.to_string()))
-        };
-    }
-    let pref = &arg[..2];
-    if pref == "0x" {
-        let res = hex::decode(&arg[2..]);
-        return match res {
-            Ok(v) => {
-                let mut res : i32 = 0;
-                let mut i = 0;
-                while i < v.len() {
-                    res <<= 8;
-                    res += v[i] as i32;
-                    i += 1;
-                    if i==4 {
-                        break;
-                    }
-                }
-                Ok(res)
-            }
-            Err(e) => {Err(e.to_string())}
-        };
-    }
-    if pref == "0b" {
-        return match i32::from_str_radix(&arg[2..], 2) {
-            Ok(n) => {Ok(n)}
-            Err(e) => {Err(e.to_string())}
-        };
-    }
-    return match arg.parse() {
-            Ok(n) => (Ok(n)),
-            Err(e) => (Err(e.to_string()))
-        };
 }
 
 pub enum Encoding {
@@ -329,7 +290,7 @@ fn pass2(lines : Vec<(Line, u32, Section)>, lbl_adr : &HashMap<String, u32>, sta
         match i {
             Line::Instr(instr, args) => {
                 //println!("{}:{}", counter, instr.name);
-                let enc = get_enc(instr, args.clone(), &lbl_adr, *ln, counter);
+                let enc = get_enc2(instr, args.clone(), &lbl_adr, *ln, counter);
                 /*
                 match enc {
                     Encoding::Register(o, s, t, d, a, f) => {println!("{},{},{},{},{},{}", o,s,t,d,a,f);}
@@ -372,6 +333,12 @@ fn main() {
     std::env::set_var("RUST_BACKTRACE","1");
 
     let args : Vec<String> = std::env::args().collect();
+    if args.len() < 2 {
+        println!("No parameters given, needs 1 or 3");
+        println!("Usage:    assembler_rust file");
+        println!("          assembler_rust file -o outfile");
+        return;
+    }
     let fdata = std::fs::read_to_string(&args[1]);
 
     match fdata {
