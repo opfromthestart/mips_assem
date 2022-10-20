@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use to_binary::BinaryString;
 
-use crate::codes::{Arg, Args, get_arguments2, get_enc2, Syntax};
+use crate::codes::{Arg, Args, get_arguments, get_enc, Syntax};
 use crate::tables::{get_code, InstrCode};
 
 mod tables;
@@ -221,7 +221,7 @@ fn pass1(assem : &String, start_text_opt : Option<u32>) -> (Vec<(Line,u32, Secti
 
         //println!("{}",line_args);
 
-        let adata : Args<Arg> = get_arguments2(line_args);
+        let adata : Args<Arg> = get_arguments(line_args);
 
         lines.push((Line::Instr(code, adata), curline, cur_section));
 
@@ -290,7 +290,7 @@ fn pass2(lines : Vec<(Line, u32, Section)>, lbl_adr : &HashMap<String, u32>, sta
         match i {
             Line::Instr(instr, args) => {
                 //println!("{}:{}", counter, instr.name);
-                let enc = get_enc2(instr, args.clone(), &lbl_adr, *ln, counter);
+                let enc = get_enc(instr, args.clone(), &lbl_adr, *ln, counter);
                 /*
                 match enc {
                     Encoding::Register(o, s, t, d, a, f) => {println!("{},{},{},{},{},{}", o,s,t,d,a,f);}
