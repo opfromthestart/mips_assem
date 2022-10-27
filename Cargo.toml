@@ -9,6 +9,3 @@ edition = "2021"
 rev_slice = "0.1.5"
 hex = "0.3.1"
 to-binary = "0.4.0"
-
-[env]
-RUST_BACKTRACE=1
