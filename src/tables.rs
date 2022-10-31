@@ -1,6 +1,7 @@
 use crate::codes::Arg;
 use crate::{rem_spaces, Args, Syntax};
 use std::collections::HashMap;
+use std::str::Split;
 
 static REGS: [&str; 32] = [
     "zero", "at", "v0", "v1", "a0", "a1", "a2", "a3", "t0", "t1", "t2", "t3", "t4", "t5", "t6",
@@ -14,7 +15,7 @@ pub struct InstrCode<'a> {
     pub(crate) code: i8,
 }
 
-static CODES: [InstrCode; 53] = [
+static CODES: [InstrCode; 68] = [
     InstrCode {
         name: "null",
         syntax: Syntax::Syscall,
@@ -280,6 +281,81 @@ static CODES: [InstrCode; 53] = [
         syntax: Syntax::S2ArithLog,
         code: 2,
     },
+    InstrCode {
+        name: "lui",
+        syntax: Syntax::LoadI,
+        code: 15,
+    },
+    InstrCode {
+        name: "bgez",
+        syntax: Syntax::RegImmBranch,
+        code: 1,
+    },
+    InstrCode {
+        name: "mfc1",
+        syntax: Syntax::CoProc1Move,
+        code: 0,
+    },
+    InstrCode {
+        name: "mtc1",
+        syntax: Syntax::CoProc1Move,
+        code: 4,
+    },
+    InstrCode {
+        name: "break",
+        syntax: Syntax::Break,
+        code: 13,
+    },
+    InstrCode {
+        name: "lwr",
+        syntax: Syntax::LoadStore,
+        code: 34,
+    },
+    InstrCode {
+        name: "swr",
+        syntax: Syntax::LoadStore,
+        code: 46,
+    },
+    InstrCode {
+        name: "lwl",
+        syntax: Syntax::LoadStore,
+        code: 38,
+    },
+    InstrCode {
+        name: "swl",
+        syntax: Syntax::LoadStore,
+        code: 42,
+    },
+    InstrCode {
+        name: "ldc1",
+        syntax: Syntax::LoadStore,
+        code: 53,
+    },
+    InstrCode {
+        name: "sdc1",
+        syntax: Syntax::LoadStore,
+        code: 61,
+    },
+    InstrCode {
+        name: "lwc1",
+        syntax: Syntax::LoadStore,
+        code: 49,
+    },
+    InstrCode {
+        name: "swc1",
+        syntax: Syntax::LoadStore,
+        code: 57,
+    },
+    InstrCode {
+        name: "sc",
+        syntax: Syntax::AtomicLoadStore,
+        code: 38,
+    },
+    InstrCode {
+        name: "ll",
+        syntax: Syntax::AtomicLoadStore,
+        code: 54,
+    },
 ];
 
 pub fn get_code<S: Into<String>>(line: S) -> &'static InstrCode<'static> {
@@ -306,13 +382,12 @@ pub fn as_register<S: Into<String>>(arg: S) -> Result<i8, ()> {
     Err(())
 }
 
-pub fn get_ops(
-    opfile: Option<&str>,
+pub fn get_ops<S : Into<String>>(
+    opfile: Option<S>,
 ) -> HashMap<String, Box<dyn Fn(Args<Arg>) -> Vec<&'static InstrCode<'static>>>> {
-    todo!();
     let fname = match opfile {
-        None => "res/PseudoOps.txt",
-        Some(s) => s,
+        None => "res/PseudoOps.txt".into(),
+        Some(s) => s.into(),
     };
 
     let instr_table = HashMap::new();
@@ -321,6 +396,7 @@ pub fn get_ops(
 
     match total {
         Ok(tot) => {
+
             for line in tot.lines() {
                 let line_nc_dirty: &str = {
                     // Removes comments, which start with #
@@ -336,7 +412,26 @@ pub fn get_ops(
                     continue;
                 }
 
-                println!("{}", line);
+                //println!("{}", line);
+
+                let instrs : Vec<_> = line_nc.split("\t").filter(|x| x!=&"").collect();
+
+                /*
+                for i in instrs {
+                    print!("{{{}}}, ", i);
+                }
+                println!();
+                 */
+
+                let pseudo = instrs[0];
+                let repls : Vec<String> = instrs[1..].iter().map(|x| {let y : &str = x.to_owned(); y.into()}).collect();
+
+                for i in &repls {
+                    let word = i.split(&String::from(" ")).collect::<Vec<&str>>()[0];//.map(|x| x.to_owned()).collect();
+                    if get_code(word).code == -1 && word != "DBNOP" && word != "COMPACT" {
+                        println!("{}", &word);
+                    }
+                }
             }
         }
         _ => {

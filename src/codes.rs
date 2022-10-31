@@ -24,6 +24,11 @@ pub enum Syntax {
     Trap,
     Syscall,
     S2ArithLog,
+    RegImmBranch,
+    CoProc1Move,
+    Break,
+    AtomicLoadStore,
+    Pseudo(Box<fn(Args<Arg>) -> Encoding>),
 }
 
 #[derive(Clone)]
@@ -206,7 +211,7 @@ pub fn get_enc(
     line: u32,
     adr: u32,
 ) -> Encoding {
-    match instr.syntax {
+    match &instr.syntax {
         Syntax::ArithLog => {
             let (a1, a2, a3) = match args {
                 Args::Three(a1, a2, a3) => (a1, a2, a3),
@@ -717,6 +722,133 @@ pub fn get_enc(
             }
 
             Encoding::Register(28, 0, 0, 0, 0, instr.code)
+        }
+        Syntax::Pseudo(func) => {func(args)}
+        Syntax::RegImmBranch => {
+            let (a1, a2) = match args {
+                Args::Two(a1, a2) => (a1, a2),
+                _ => {
+                    println!("Invalid number of arguments found on line {0}.", line);
+                    panic!();
+                }
+            };
+            let s = a1.to_bin(lbl_adr);
+            let i = a2.to_bin(lbl_adr);
+
+            match i {
+                Some(ir) => {
+                    match s {
+                        Some(sr) => {
+                            let i_m: i16 = (((ir as i32 - adr as i32) >> 2) - 1) as i16;
+                            //println!("{}", i_m);
+                            return Encoding::Immediate(1, sr as i8, instr.code, i_m);
+                        }
+                        None => {
+                            println!(
+                                "Register \"{0}\" not found in {1} on line {2}.",
+                                a1, instr.name, line
+                            )
+                        }
+                    }
+                }
+                None => {
+                    println!(
+                        "Label \"{0}\" not found, in {1} on line {2}.",
+                        a2, instr.name, line
+                    )
+                }
+            }
+
+            Encoding::Immediate(instr.code, 0, 0, 0)
+        }
+        Syntax::CoProc1Move => {
+            let (a1, a2) = match args {
+                Args::Two(a, b) => {(a,b)}
+                _ => {
+                    println!("Invalid number of arguments found on line {0}.", line);
+                    panic!();
+                }
+            };
+
+            let t = a1.to_bin(lbl_adr);
+            let s = a2.to_bin(lbl_adr);
+
+            match t {
+                Some(tr) => {
+                    match s {
+                        Some(sr) => {
+                            return Encoding::Register(17, instr.code, tr as i8, sr as i8, 0, 0);
+                        }
+                        None => {
+                            println!(
+                                "Register \"{0}\" not found in {1} on line {2}.",
+                                a2, instr.name, line
+                            )
+                        }
+                    }
+                }
+                None => {
+                    println!(
+                        "Register \"{0}\" not found, in {1} on line {2}.",
+                        a1, instr.name, line
+                    )
+                }
+            }
+            Encoding::Register(17, instr.code, 0, 0, 0, 0)
+        }
+        Syntax::Break => {
+            match args {
+                Args::None => (),
+                _ => {
+                    println!("Invalid number of arguments found on line {0}.", line);
+                    panic!()
+                }
+            };
+
+            Encoding::Register(0, 0, 0, 0, 0, instr.code)
+        }
+        Syntax::AtomicLoadStore => {
+            let (a1, a2, a3) = match args {
+                Args::Three(a1, a2, a3) => (a1, a2, a3),
+                _ => {
+                    println!("Invalid number of arguments found on line {0}.", line);
+                    panic!();
+                }
+            };
+            let t = a1.to_bin(lbl_adr);
+            let i = a2.to_bin(lbl_adr);
+            let s = a3.to_bin(lbl_adr);
+
+            match i {
+                Some(ir) => match s {
+                    Some(sr) => match t {
+                        Some(tr) => {
+                            let i_m: i16 = (((ir as i32 - adr as i32) >> 2) - 1) as i16;
+                            return Encoding::Register(31, sr as i8, tr as i8, (i_m/2) as i8, (i_m << 1) as i8, instr.code);
+                        }
+                        None => {
+                            println!(
+                                "Register \"{0}\" not found in {1} on line {2}.",
+                                a1, instr.name, line
+                            )
+                        }
+                    },
+                    None => {
+                        println!(
+                            "Register \"{0}\" not found in {1} on line {2}.",
+                            a3, instr.name, line
+                        )
+                    }
+                },
+                None => {
+                    println!(
+                        "Number \"{0}\" not valid, in {1} on line {2}.",
+                        a2, instr.name, line
+                    )
+                }
+            }
+
+            Encoding::Register(31, 0, 0, 0, 0, instr.code)
         }
     }
 }

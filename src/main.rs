@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use to_binary::BinaryString;
 
 use crate::codes::{get_arguments, get_enc, Arg, Args, Syntax};
-use crate::tables::{get_code, InstrCode};
+use crate::tables::{get_code, get_ops, InstrCode};
 
 mod codes;
 mod tables;
@@ -368,6 +368,8 @@ fn main() {
         return;
     }
     let fdata = std::fs::read_to_string(&args.get("file").unwrap());
+
+    let _pseudos = get_ops(args.get("pseudo"));
 
     match fdata {
         Ok(data) => {
