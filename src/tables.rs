@@ -308,7 +308,8 @@ pub fn as_register<S: Into<String>>(arg: S) -> Result<i8, ()> {
 
 pub fn get_ops(
     opfile: Option<&str>,
-) -> HashMap<String, fn(Args<Arg>) -> Vec<&'static InstrCode<'static>>> {
+) -> HashMap<String, Box<dyn Fn(Args<Arg>) -> Vec<&'static InstrCode<'static>>>> {
+    todo!();
     let fname = match opfile {
         None => "res/PseudoOps.txt",
         Some(s) => s,
@@ -334,6 +335,8 @@ pub fn get_ops(
                 if line_nc.len() == 0 {
                     continue;
                 }
+
+                println!("{}", line);
             }
         }
         _ => {

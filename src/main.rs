@@ -335,6 +335,24 @@ fn pass2(
     text_code
 }
 
+fn get_cmd_args(args : Vec<String>) -> HashMap<String, String> {
+    let mut arg_type : String = "file".into();
+    let mut argmap = HashMap::new();
+    for arg in args {
+        arg_type = if arg=="-o" {
+            "outfile".into()
+        }
+        else if arg=="-p" {
+            "pseudo".into()
+        }
+        else {
+            argmap.insert(arg_type, arg);
+            "file".into()
+        };
+    }
+    argmap
+}
+
 // Tested on own code as well as samples from:
 // https://ecs-network.serv.pacific.edu/ecpe-170/tutorials/mips-example-programs
 // https://github.com/ffcabbar/MIPS-Assembly-Language-Examples
@@ -343,14 +361,13 @@ fn pass2(
 fn main() {
     std::env::set_var("RUST_BACKTRACE", "1");
 
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 {
-        println!("No parameters given, needs 1 or 3");
-        println!("Usage:    assembler_rust file");
-        println!("          assembler_rust file -o outfile");
+    let args: HashMap<String, String> = get_cmd_args(std::env::args().collect());
+    if let None=args.get("file") {
+        println!("No parameters given, needs at least 1");
+        println!("Usage:    assembler_rust file [-o outfile] [-p pseudos]");
         return;
     }
-    let fdata = std::fs::read_to_string(&args[1]);
+    let fdata = std::fs::read_to_string(&args.get("file").unwrap());
 
     match fdata {
         Ok(data) => {
@@ -390,21 +407,21 @@ fn main() {
             match bin_res {
                 Ok(bin) => {
                     let out = String::from({
-                        if args.len() == 4 && args[2].eq("-o") {
-                            &args[3]
+                        if let Some(x)=args.get("outfile") {
+                            x
                         } else {
-                            let dot_find: Option<usize> = args[1].rfind(".");
-                            let slash_find: Option<usize> = args[1].rfind("/");
-                            let ln = args[1].len();
+                            let dot_find: Option<usize> = args["file"].rfind(".");
+                            let slash_find: Option<usize> = args["file"].rfind("/");
+                            let ln = args["file"].len();
                             match dot_find {
-                                None => &args[1],
+                                None => &args["file"],
                                 Some(n) => match slash_find {
-                                    None => &args[1][..ln - n],
+                                    None => &args["file"][..ln - n],
                                     Some(n2) => {
                                         if n > n2 {
-                                            &args[1]
+                                            &args["file"]
                                         } else {
-                                            &args[1][..ln - n]
+                                            &args["file"][..ln - n]
                                         }
                                     }
                                 },
@@ -445,7 +462,7 @@ fn main() {
             }
         }
         Err(_) => {
-            println!("File \"{0}\" not found.", &args[1])
+            println!("File \"{0}\" not found.", &args["file"])
         }
     }
     //println!("\"{0}\"", arg_nospace);
