@@ -369,10 +369,12 @@ fn main() {
     }
     let fdata = std::fs::read_to_string(&args.get("file").unwrap());
 
-    let _pseudos = get_ops(args.get("pseudo"));
+
 
     match fdata {
         Ok(data) => {
+            let pseudos = get_ops(args.get("pseudo"));
+
             let (lines, lbls, start, text) = pass1(&data, Some(0x400000));
 
             /*

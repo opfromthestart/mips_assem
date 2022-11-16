@@ -46,6 +46,30 @@ pub enum Arg {
     Label(String),
 }
 
+impl Arg {
+    fn as_register(&self) -> Option<i8> {
+        match self {
+            Arg::Reg(e) => {Some(*e)}
+            Arg::Imm(_) => {None}
+            Arg::Label(_) => {None}
+        }
+    }
+    fn as_number(&self) -> Option<i32> {
+        match self {
+            Arg::Reg(_) => {None}
+            Arg::Imm(e) => {Some(*e)}
+            Arg::Label(_) => {None}
+        }
+    }
+    fn as_label(&self, lbl_adr: &HashMap<String, u32>) -> Option<u32> {
+        match self {
+            Arg::Reg(_) => {None}
+            Arg::Imm(_) => {None}
+            Arg::Label(l) => {Some(*(lbl_adr.get(l)?))}
+        }
+    }
+}
+
 trait Binary {
     fn to_bin(&self, lbl_adr: &HashMap<String, u32>) -> Option<u32>;
 }
@@ -55,10 +79,10 @@ impl Binary for Arg {
         match self {
             Arg::Reg(r) => Some(*r as u32),
             Arg::Imm(n) => Some(*n as u32),
-            Arg::Label(l) => match lbl_adr.get(l) {
+            Arg::Label(l) => {match lbl_adr.get(l) {
                 None => None,
                 Some(i) => Some(*i),
-            },
+            }},
         }
     }
 }
@@ -220,16 +244,16 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let d = a1.to_bin(lbl_adr);
-            let s = a2.to_bin(lbl_adr);
-            let t = a3.to_bin(lbl_adr);
+            let d = a1.as_register();
+            let s = a2.as_register();
+            let t = a3.as_register();
 
             match d {
                 Some(dr) => match s {
                     Some(sr) => match t {
                         Some(tr) => {
                             return Encoding::Register(
-                                0, sr as i8, tr as i8, dr as i8, 0, instr.code,
+                                0, sr, tr, dr, 0, instr.code,
                             );
                         }
                         None => {
@@ -264,13 +288,13 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let s = a1.to_bin(lbl_adr);
-            let t = a2.to_bin(lbl_adr);
+            let s = a1.as_register();
+            let t = a2.as_register();
 
             match s {
                 Some(sr) => match t {
                     Some(tr) => {
-                        return Encoding::Register(0, sr as i8, tr as i8, 0, 0, instr.code);
+                        return Encoding::Register(0, sr, tr, 0, 0, instr.code);
                     }
                     None => {
                         println!(
@@ -297,16 +321,16 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let d = a1.to_bin(lbl_adr);
-            let t = a2.to_bin(lbl_adr);
-            let a = a3.to_bin(lbl_adr);
+            let d = a1.as_register();
+            let t = a2.as_register();
+            let a = a3.as_number();
 
             match a {
                 Some(ar) => match t {
                     Some(tr) => match d {
                         Some(dr) => {
                             return Encoding::Register(
-                                0, 0, tr as i8, dr as i8, ar as i8, instr.code,
+                                0, 0, tr, dr, ar as i8, instr.code,
                             );
                         }
                         None => {
@@ -341,16 +365,16 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let d = a1.to_bin(lbl_adr);
-            let t = a2.to_bin(lbl_adr);
-            let s = a3.to_bin(lbl_adr);
+            let d = a1.as_register();
+            let t = a2.as_register();
+            let s = a3.as_register();
 
             match d {
                 Some(dr) => match s {
                     Some(sr) => match t {
                         Some(tr) => {
                             return Encoding::Register(
-                                0, sr as i8, tr as i8, dr as i8, 0, instr.code,
+                                0, sr, tr, dr, 0, instr.code,
                             );
                         }
                         None => {
@@ -385,11 +409,11 @@ pub fn get_enc(
                     panic!()
                 }
             };
-            let s = a1.to_bin(lbl_adr);
+            let s = a1.as_register();
 
             match s {
                 Some(sr) => {
-                    return Encoding::Register(0, sr as i8, 0, 0, 0, instr.code);
+                    return Encoding::Register(0, sr, 0, 0, 0, instr.code);
                 }
                 None => {
                     println!(
@@ -409,11 +433,11 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let d = a1.to_bin(lbl_adr);
+            let d = a1.as_register();
 
             match d {
                 Some(dr) => {
-                    return Encoding::Register(0, 0, 0, dr as i8, 0, instr.code);
+                    return Encoding::Register(0, 0, 0, dr, 0, instr.code);
                 }
                 None => {
                     println!(
@@ -433,15 +457,15 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let t = a1.to_bin(lbl_adr);
-            let s = a2.to_bin(lbl_adr);
-            let i = a3.to_bin(lbl_adr);
+            let t = a1.as_register();
+            let s = a2.as_register();
+            let i = a3.as_number();
 
             match i {
                 Some(ir) => match s {
                     Some(sr) => match t {
                         Some(tr) => {
-                            return Encoding::Immediate(instr.code, sr as i8, tr as i8, ir as i16);
+                            return Encoding::Immediate(instr.code, sr, tr, ir as i16);
                         }
                         None => {
                             println!(
@@ -475,13 +499,13 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let t = a1.to_bin(lbl_adr);
-            let i = a2.to_bin(lbl_adr);
+            let t = a1.as_register();
+            let i = a2.as_number();
 
             match i {
                 Some(ir) => match t {
                     Some(tr) => {
-                        return Encoding::Immediate(instr.code, 0, tr as i8, ir as i16);
+                        return Encoding::Immediate(instr.code, 0, tr, ir as i16);
                     }
                     None => {
                         println!(
@@ -508,9 +532,9 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let s = a1.to_bin(lbl_adr);
-            let t = a2.to_bin(lbl_adr);
-            let i = a3.to_bin(lbl_adr);
+            let s = a1.as_register();
+            let t = a2.as_register();
+            let i = a3.as_label(lbl_adr);
 
             match i {
                 Some(ir) => {
@@ -521,7 +545,7 @@ pub fn get_enc(
                                     let i_m: i16 = (((ir as i32 - adr as i32) >> 2) - 1) as i16;
                                     //println!("{}", i_m);
                                     return Encoding::Immediate(
-                                        instr.code, sr as i8, tr as i8, i_m,
+                                        instr.code, sr, tr, i_m,
                                     );
                                 }
                                 None => {
@@ -558,16 +582,16 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let s = a1.to_bin(lbl_adr);
-            let i = a2.to_bin(lbl_adr);
+            let s = a1.as_register();
+            let i = a2.as_number();
 
             match i {
                 Some(ir) => {
                     match s {
                         Some(sr) => {
-                            let i_m: i16 = (((ir as i32 - adr as i32) >> 2) - 1) as i16;
+                            let i_m: i16 = (((ir - adr as i32) >> 2) - 1) as i16;
                             //println!("{}", i_m);
-                            return Encoding::Immediate(instr.code, sr as i8, 0, i_m);
+                            return Encoding::Immediate(instr.code, sr, 0, i_m);
                         }
                         None => {
                             println!(
@@ -595,16 +619,16 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let t = a1.to_bin(lbl_adr);
-            let i = a2.to_bin(lbl_adr);
-            let s = a3.to_bin(lbl_adr);
+            let t = a1.as_register();
+            let i = a2.as_number();
+            let s = a3.as_register();
 
             match i {
                 Some(ir) => match s {
                     Some(sr) => match t {
                         Some(tr) => {
                             let i_m: i16 = (((ir as i32 - adr as i32) >> 2) - 1) as i16;
-                            return Encoding::Immediate(instr.code, sr as i8, tr as i8, i_m);
+                            return Encoding::Immediate(instr.code, sr, tr, i_m);
                         }
                         None => {
                             println!(
@@ -638,7 +662,7 @@ pub fn get_enc(
                     panic!()
                 }
             };
-            let i = a1.to_bin(lbl_adr);
+            let i = a1.as_label(lbl_adr);
 
             match i {
                 None => {
@@ -662,7 +686,7 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let i = a1.to_bin(lbl_adr);
+            let i = a1.as_label(lbl_adr);
 
             match i {
                 None => {
@@ -687,16 +711,16 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let d = a1.to_bin(lbl_adr);
-            let s = a2.to_bin(lbl_adr);
-            let t = a3.to_bin(lbl_adr);
+            let d = a1.as_register();
+            let s = a2.as_register();
+            let t = a3.as_register();
 
             match d {
                 Some(dr) => match s {
                     Some(sr) => match t {
                         Some(tr) => {
                             return Encoding::Register(
-                                28, sr as i8, tr as i8, dr as i8, 0, instr.code,
+                                28, sr, tr, dr, 0, instr.code,
                             );
                         }
                         None => {
@@ -732,8 +756,8 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let s = a1.to_bin(lbl_adr);
-            let i = a2.to_bin(lbl_adr);
+            let s = a1.as_register();
+            let i = a2.as_number();
 
             match i {
                 Some(ir) => {
@@ -741,7 +765,7 @@ pub fn get_enc(
                         Some(sr) => {
                             let i_m: i16 = (((ir as i32 - adr as i32) >> 2) - 1) as i16;
                             //println!("{}", i_m);
-                            return Encoding::Immediate(1, sr as i8, instr.code, i_m);
+                            return Encoding::Immediate(1, sr, instr.code, i_m);
                         }
                         None => {
                             println!(
@@ -770,14 +794,14 @@ pub fn get_enc(
                 }
             };
 
-            let t = a1.to_bin(lbl_adr);
-            let s = a2.to_bin(lbl_adr);
+            let t = a1.as_register();
+            let s = a2.as_register();
 
             match t {
                 Some(tr) => {
                     match s {
                         Some(sr) => {
-                            return Encoding::Register(17, instr.code, tr as i8, sr as i8, 0, 0);
+                            return Encoding::Register(17, instr.code, tr, sr , 0, 0);
                         }
                         None => {
                             println!(
@@ -815,16 +839,16 @@ pub fn get_enc(
                     panic!();
                 }
             };
-            let t = a1.to_bin(lbl_adr);
-            let i = a2.to_bin(lbl_adr);
-            let s = a3.to_bin(lbl_adr);
+            let t = a1.as_register();
+            let i = a2.as_number();
+            let s = a3.as_register();
 
             match i {
                 Some(ir) => match s {
                     Some(sr) => match t {
                         Some(tr) => {
                             let i_m: i16 = (((ir as i32 - adr as i32) >> 2) - 1) as i16;
-                            return Encoding::Register(31, sr as i8, tr as i8, (i_m/2) as i8, (i_m << 1) as i8, instr.code);
+                            return Encoding::Register(31, sr , tr , (i_m/2) as i8, (i_m << 1) as i8, instr.code);
                         }
                         None => {
                             println!(
