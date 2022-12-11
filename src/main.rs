@@ -465,8 +465,8 @@ fn main() {
                 }
             }
         }
-        Err(_) => {
-            println!("File \"{0}\" not found.", &args["file"])
+        Err(e) => {
+            println!("Assembly file \"{0}\" not found.\n{1}", &args["file"], e)
         }
     }
     //println!("\"{0}\"", arg_nospace);

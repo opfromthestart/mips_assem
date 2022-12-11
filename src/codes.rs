@@ -69,7 +69,7 @@ impl Arg {
         }
     }
 }
-
+/*
 trait Binary {
     fn to_bin(&self, lbl_adr: &HashMap<String, u32>) -> Option<u32>;
 }
@@ -86,6 +86,7 @@ impl Binary for Arg {
         }
     }
 }
+*/
 
 impl Display for Arg {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
